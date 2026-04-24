@@ -1,5 +1,5 @@
 // VELQOR JOURNAL — Analytics Page
-import { AppState, openModal } from '../app.js';
+import { AppState, openModal, getActiveTrades, getCurrency } from '../app.js';
 import { fmt, fmtR, fmtPct, fmtDate, computeMetrics, groupByPeriod, getRDistribution, getBySetup, computeDrawdownSeries, colorForValue } from '../utils.js';
 import { Charts } from '../charts.js';
 
@@ -33,7 +33,7 @@ export function initAnalytics() {
 }
 
 function _getFilteredTrades() {
-  const all = AppState.trades;
+  const all = getActiveTrades();
   const now = Date.now();
   if (_period === '30')  return all.filter(t => now - (t.date?.toDate?.()??new Date(t.date)).getTime() < 30*864e5);
   if (_period === '90')  return all.filter(t => now - (t.date?.toDate?.()??new Date(t.date)).getTime() < 90*864e5);
@@ -45,7 +45,7 @@ function _buildAnalytics() {
   const content  = document.getElementById('analytics-content');
   if (!content) return;
   const trades   = _getFilteredTrades();
-  const currency = AppState.profile?.currency || 'USD';
+  const currency = getCurrency();
   const m        = computeMetrics(trades);
   const monthGrp = groupByPeriod(trades, 'month');
   const rBins    = getRDistribution(trades);

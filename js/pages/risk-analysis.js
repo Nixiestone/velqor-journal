@@ -1,5 +1,5 @@
 // VELQOR JOURNAL — Risk Analysis
-import { AppState } from '../app.js';
+import { AppState, openModal, getActiveTrades, getCurrency, closeModal } from '../app.js';
 import { fmt, fmtR, computeMetrics, computeDrawdownSeries, groupByPeriod } from '../utils.js';
 import { Charts } from '../charts.js';
 
@@ -15,8 +15,8 @@ export function renderRiskAnalysis() {
 }
 
 export function initRiskAnalysis() {
-  const trades   = AppState.trades;
-  const currency = AppState.profile?.currency || 'USD';
+  const trades   = getActiveTrades();
+  const currency = getCurrency();
   const profile  = AppState.profile;
   const content  = document.getElementById('risk-content');
   if (!content) return;

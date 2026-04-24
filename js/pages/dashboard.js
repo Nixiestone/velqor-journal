@@ -1,11 +1,11 @@
 // VELQOR JOURNAL — Dashboard Page
-import { AppState, openModal } from '../app.js';
+import { AppState, openModal, getActiveTrades, getCurrency } from '../app.js';
 import { fmt, fmtPct, fmtR, fmtDate, fmtTime, computeMetrics, groupByPeriod, toDate } from '../utils.js';
 import { Charts } from '../charts.js';
 
 export function renderDashboard() {
-  const { trades, profile, playbook } = AppState;
-  const currency = profile?.currency || 'USD';
+  const trades = getActiveTrades(); const { profile, playbook } = AppState;
+  const currency = getCurrency();
   const m = computeMetrics(trades);
   const balance  = profile?.accountBalance || 0;
   const starting = profile?.startingBalance || balance;
@@ -174,8 +174,8 @@ function renderPerfSummary(m, currency) {
 }
 
 export function initDashboard() {
-  const { trades, profile, playbook } = AppState;
-  const currency = profile?.currency || 'USD';
+  const trades = getActiveTrades(); const { profile, playbook } = AppState;
+  const currency = getCurrency();
   const m = computeMetrics(trades);
   const monthGroups = groupByPeriod(trades, 'month');
 

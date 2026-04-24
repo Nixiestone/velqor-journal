@@ -1,5 +1,5 @@
 // VELQOR JOURNAL — Time Analysis Page
-import { AppState } from '../app.js';
+import { AppState, openModal, getActiveTrades, getCurrency, closeModal } from './app.js';
 import { fmt, fmtR, computeMetrics, getBySession, getByDayOfWeek, getByHour, groupByPeriod, colorForValue } from '../utils.js';
 import { Charts } from '../charts.js';
 
@@ -15,8 +15,8 @@ export function renderTimeAnalysis() {
 }
 
 export function initTimeAnalysis() {
-  const trades   = AppState.trades;
-  const currency = AppState.profile?.currency || 'USD';
+  const trades   = getActiveTrades();
+  const currency = getCurrency();
   const content  = document.getElementById('time-content');
   if (!content) return;
 

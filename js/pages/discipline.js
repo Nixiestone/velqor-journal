@@ -1,5 +1,5 @@
 // VELQOR JOURNAL — Discipline Analysis
-import { AppState, openModal } from '../app.js';
+import { AppState, openModal, getActiveTrades, getCurrency, closeModal } from '../app.js';
 import { getDisciplineScore, groupByPeriod, computeMetrics, toDate } from '../utils.js';
 import { Charts } from '../charts.js';
 
@@ -15,7 +15,8 @@ export function renderDiscipline() {
 }
 
 export function initDiscipline() {
-  const { trades, profile } = AppState;
+  const trades = getActiveTrades();
+  const { profile } = AppState;
   const content = document.getElementById('discipline-content');
   if (!content) return;
 
