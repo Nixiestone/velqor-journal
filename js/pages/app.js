@@ -98,8 +98,6 @@ export async function openModal(type, id = null) {
 
   box.innerHTML = html;
   bg.style.display = 'flex';
-  // Wire backdrop click once
-  bg.onclick = e => { if (e.target === bg) closeModal(); };
   if (initFn) initFn();
 }
 
@@ -387,22 +385,21 @@ function _doInitialNav() {
 
 // === AUTH SCREENS ===
 function _showApp() {
-  const auth=document.getElementById('auth-screen');
-  const app =document.getElementById('app');
-  const load=document.getElementById('app-loading');
-  if(auth){auth.classList.add('hidden');}
-  if(app) app.style.display='flex';
-  if(load) load.classList.add('hidden');
-  setTimeout(()=>{ if(auth?.classList.contains('hidden')) auth.style.display='none'; if(load) load.style.display='none'; },500);
+  const auth = document.getElementById('auth-screen');
+  const app  = document.getElementById('app');
+  const load = document.getElementById('app-loading');
+  if (auth) { auth.style.display = 'none'; }
+  if (app)  { app.style.display  = 'flex'; }
+  if (load) { load.style.display = 'none'; }
 }
 
 function _showAuth() {
-  const auth=document.getElementById('auth-screen');
-  const app =document.getElementById('app');
-  const load=document.getElementById('app-loading');
-  if(app) app.style.display='none';
-  if(auth){auth.style.display='flex'; auth.classList.remove('hidden');}
-  if(load){load.classList.add('hidden'); setTimeout(()=>{load.style.display='none';},500);}
+  const auth = document.getElementById('auth-screen');
+  const app  = document.getElementById('app');
+  const load = document.getElementById('app-loading');
+  if (app)  { app.style.display  = 'none'; }
+  if (auth) { auth.style.display = 'flex'; auth.classList.remove('hidden'); }
+  if (load) { load.style.display = 'none'; }
   AppState._unsubs.forEach(fn=>fn()); AppState._unsubs=[];
   Object.assign(AppState,{user:null,profile:null,accounts:[],activeAccount:null,trades:[],playbook:[],reviews:[],milestones:[]});
   _currentPage=null; _didInitNav=false; _sidebarInited=false; _switcherInited=false;
@@ -410,6 +407,11 @@ function _showAuth() {
 
 // === BOOT ===
 async function boot() {
+  // One-time backdrop click handler
+  document.getElementById('modal-bg')?.addEventListener('click', e => {
+    if (e.target === document.getElementById('modal-bg')) closeModal();
+  });
+
   initFirebase();
 
   function onLogin(user) {
@@ -418,12 +420,21 @@ async function boot() {
     _subscribeData(user.uid);
     _initSidebar();
     _showApp();
-    // Pre-load all modules in background after showing app
-    _preload();
+    // Preload modules after a short delay to not compete with initial render
+    setTimeout(_preload, 1500);
   }
 
   initAuthUI(onLogin);
   watchAuthState(user => onLogin(user), () => _showAuth());
   window.addEventListener('hashchange', () => { if(AppState.user) navigate(_getPage()); });
+
+  // Safety net: if Firebase hasn't responded in 6s, show auth screen
+  setTimeout(() => {
+    const load = document.getElementById('app-loading');
+    if (load && load.style.display !== 'none') {
+      console.warn('Firebase timeout — showing auth screen');
+      _showAuth();
+    }
+  }, 6000);
 }
 boot();

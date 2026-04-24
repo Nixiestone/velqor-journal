@@ -325,6 +325,7 @@ export function initAddReviewModal() {
   document.getElementById('m-cancel')?.addEventListener('click', _close);
 
   document.getElementById('rv-save-btn')?.addEventListener('click', async () => {
+    if (!AppState.user) { toast('Not logged in.', 'error'); return; }
     const startVal = document.getElementById('rv-start')?.value;
     const endVal   = document.getElementById('rv-end')?.value;
     if (!startVal) { toast('Start date is required.', 'error'); return; }
@@ -516,11 +517,12 @@ export function initAddMilestoneModal(msId = null) {
   document.getElementById('m-cancel')?.addEventListener('click', _close);
 
   document.getElementById('ms-save-btn')?.addEventListener('click', async () => {
+    if (!AppState.user) { toast('Not logged in.', 'error'); return; }
     const title     = document.getElementById('ms-title')?.value.trim();
     const targetRaw = document.getElementById('ms-target')?.value;
     const target    = parseFloat(targetRaw);
 
-    if (!title)     { toast('Title is required.', 'error'); return; }
+    if (!title)                      { toast('Title is required.', 'error');         return; }
     if (!targetRaw || isNaN(target)) { toast('Target value is required.', 'error'); return; }
 
     const btn = document.getElementById('ms-save-btn');
