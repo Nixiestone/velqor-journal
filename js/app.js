@@ -262,6 +262,53 @@ function _closeDropdown() {
   if (dd) dd.style.display = 'none';
 }
 
+function _renderPageAccountPicker() {
+  const activeId = AppState.profile?.activeAccountId || AppState.accounts[0]?.id || '';
+  return `
+    <div class="page-account-picker">
+      <label class="page-account-picker-label" for="page-account-select">Viewing Account</label>
+      <div class="page-account-picker-row">
+        <select class="form-input form-select page-account-picker-select" id="page-account-select">
+          ${AppState.accounts.map(a => `<option value="${a.id}" ${a.id===activeId?'selected':''}>${a.name} · ${a.currency}</option>`).join('')}
+        </select>
+        <button class="btn-secondary page-account-picker-add" id="page-account-add-btn" type="button">Add Account</button>
+      </div>
+    </div>`;
+}
+
+function _initPageAccountPicker() {
+  if (!AppState.user || !AppState.accounts.length) return;
+  const root = document.getElementById('page-root');
+  const page = root?.querySelector('.page-wrapper');
+  if (!root || !page || page.querySelector('#page-account-select')) return;
+
+  const holder = document.createElement('div');
+  holder.innerHTML = _renderPageAccountPicker();
+  const picker = holder.firstElementChild;
+  if (!picker) return;
+
+  const header = page.querySelector('.page-header');
+  if (header) header.insertAdjacentElement('afterend', picker);
+  else page.prepend(picker);
+
+  const select = document.getElementById('page-account-select');
+  const addBtn = document.getElementById('page-account-add-btn');
+
+  select?.addEventListener('change', async () => {
+    const nextId = select.value;
+    const currentId = AppState.profile?.activeAccountId || AppState.accounts[0]?.id || '';
+    if (!nextId || nextId === currentId) return;
+    try {
+      await DB.updateProfile(AppState.user.uid, { activeAccountId: nextId });
+    } catch (e) {
+      toast(`Failed to switch account: ${e.message}`, 'error');
+      select.value = currentId;
+    }
+  });
+
+  addBtn?.addEventListener('click', () => openModal('add-account'));
+}
+
 let _switcherInited = false;
 function _initAccountSwitcher() {
   if (_switcherInited) return; _switcherInited = true;
@@ -322,6 +369,7 @@ async function navigate(page) {
     if (!_mods[modKey]) _mods[modKey] = mod;
     root.innerHTML = mod[renderFn]();
     if (mod[initFn]) await mod[initFn]();
+    _initPageAccountPicker();
   } catch(err) {
     console.error('[Router]', page, err);
     root.innerHTML = `<div class="page-wrapper"><div class="empty-state" style="padding:60px;"><div class="empty-title">Page Error</div><div class="empty-desc">${err.message}</div></div></div>`;

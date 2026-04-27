@@ -3,7 +3,7 @@ import { getApp, initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.
 import {
   getAuth, onAuthStateChanged, signInWithEmailAndPassword,
   createUserWithEmailAndPassword, signOut, updateProfile,
-  GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, sendPasswordResetEmail
+  GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signInAnonymously, sendPasswordResetEmail
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import { firebaseConfig } from '../firebase-config.js';
 import { DB } from './db.js';
@@ -42,15 +42,19 @@ export function getAuthErrorMessage(err) {
     'auth/too-many-requests': 'Too many attempts. Try again later.',
     'auth/popup-blocked': 'Popup was blocked by your browser. Allow popups, then try Google sign-in again.',
     'auth/operation-not-supported-in-this-environment': 'This browser does not allow popup sign-in. Redirecting to Google instead.',
-    'auth/operation-not-allowed': 'Google sign-in is disabled in Firebase Authentication. Enable Google provider and try again.',
+    'auth/operation-not-allowed': 'This sign-in method is disabled in Firebase Authentication. Enable it and try again.',
     'auth/unauthorized-domain': 'This domain is not authorized in Firebase Auth settings. Add it under Authentication > Settings > Authorized domains.',
     'auth/network-request-failed': 'Network error while contacting Google. Check your connection and retry.',
-    'auth/account-exists-with-different-credential': 'An account already exists with this email using a different sign-in method.'
+    'auth/account-exists-with-different-credential': 'An account already exists with this email using a different sign-in method.',
+    'auth/admin-restricted-operation': 'Guest mode is disabled in Firebase Auth. Enable Anonymous provider to use guest mode.',
+    'auth/configuration-not-found': 'Guest mode configuration is missing in Firebase Auth. Enable Anonymous sign-in.',
+    'auth/invalid-continue-uri': 'Password reset is not configured correctly. Check your Firebase Auth settings.',
+    'auth/missing-continue-uri': 'Password reset is not configured correctly. Check your Firebase Auth settings.'
   };
   return msgs[err?.code] || err?.message || 'Authentication failed. Please try again.';
 }
 
-async function _ensureProfileForGoogleUser(user) {
+async function _ensureProfileForAuthUser(user, fallbackName = 'Trader') {
   const profile = await DB.getProfile(user.uid);
   if (profile) return;
 
@@ -64,7 +68,7 @@ async function _ensureProfileForGoogleUser(user) {
   });
 
   await DB.createProfile(user.uid, {
-    displayName:     user.displayName || 'Trader',
+    displayName:     user.displayName || fallbackName,
     email:           user.email || '',
     activeAccountId: acctRef.id,
     riskPerTrade: 1,
@@ -108,7 +112,7 @@ export async function loginGoogle() {
 
   try {
     const cred = await signInWithPopup(_auth, provider);
-    await _ensureProfileForGoogleUser(cred.user);
+    await _ensureProfileForAuthUser(cred.user, 'Trader');
     return cred.user;
   } catch (err) {
     const fallbackCodes = new Set([
@@ -126,7 +130,13 @@ export async function loginGoogle() {
 export async function finalizeRedirectLogin() {
   const cred = await getRedirectResult(_auth);
   if (!cred?.user) return null;
-  await _ensureProfileForGoogleUser(cred.user);
+  await _ensureProfileForAuthUser(cred.user, 'Trader');
+  return cred.user;
+}
+
+export async function loginGuest() {
+  const cred = await signInAnonymously(_auth);
+  await _ensureProfileForAuthUser(cred.user, 'Guest');
   return cred.user;
 }
 
@@ -152,6 +162,7 @@ export function initAuthUI(onAuthSuccess) {
   const spinner     = document.getElementById('auth-spinner');
   const errorDiv    = document.getElementById('auth-error');
   const googleBtn   = document.getElementById('google-btn');
+  const guestBtn    = document.getElementById('guest-btn');
   const forgotLink  = document.getElementById('forgot-link');
   const eyeBtn      = document.getElementById('toggle-password');
 
@@ -181,10 +192,27 @@ export function initAuthUI(onAuthSuccess) {
 
   forgotLink?.addEventListener('click', async e => {
     e.preventDefault();
-    const email = emailInput.value.trim();
-    if (!email) { showError('Enter your email first.'); return; }
-    try { await resetPassword(email); clearError(); alert('Password reset email sent.'); }
-    catch(err) { showError(err.message); }
+    clearError();
+    let email = emailInput.value.trim();
+    if (!email) {
+      email = (window.prompt('Enter the email for password reset:') || '').trim();
+      if (!email) { showError('Password reset cancelled.'); return; }
+      emailInput.value = email;
+    }
+
+    const oldText = forgotLink.textContent;
+    forgotLink.textContent = 'Sending...';
+    forgotLink.style.pointerEvents = 'none';
+    try {
+      await resetPassword(email);
+      clearError();
+      alert('Password reset email sent. Check your inbox/spam.');
+    } catch(err) {
+      showError(getAuthErrorMessage(err));
+    } finally {
+      forgotLink.textContent = oldText;
+      forgotLink.style.pointerEvents = '';
+    }
   });
 
   googleBtn?.addEventListener('click', async () => {
@@ -197,6 +225,18 @@ export function initAuthUI(onAuthSuccess) {
       if (err.code !== 'auth/popup-closed-by-user') showError(getAuthErrorMessage(err));
     } finally {
       googleBtn.disabled = false;
+    }
+  });
+
+  guestBtn?.addEventListener('click', async () => {
+    clearError();
+    guestBtn.disabled = true;
+    try {
+      onAuthSuccess(await loginGuest());
+    } catch (err) {
+      showError(getAuthErrorMessage(err));
+    } finally {
+      guestBtn.disabled = false;
     }
   });
 

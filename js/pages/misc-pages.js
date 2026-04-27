@@ -8,6 +8,21 @@ import { fmt, fmtDate, fmtR, computeMetrics, toDate } from '../utils.js';
 // ─────────────────────────────────────────────
 function _close() { closeModal(); }
 
+function _getActiveAccountId() {
+  return getActiveAccount()?.id || AppState.profile?.activeAccountId || AppState.accounts[0]?.id || '';
+}
+
+function _accountOptions(selectedId) {
+  if (!AppState.accounts.length) return '<option value="">No account found</option>';
+  return AppState.accounts.map(a => `<option value="${a.id}" ${a.id===selectedId?'selected':''}>${a.name} · ${a.currency}</option>`).join('');
+}
+
+function _belongsToActiveAccount(item) {
+  const activeId = _getActiveAccountId();
+  if (!activeId) return true;
+  return !item?.accountId || item.accountId === activeId;
+}
+
 // ─────────────────────────────────────────────
 // PLAYBOOK
 // ─────────────────────────────────────────────
@@ -36,7 +51,7 @@ export function initPlaybook() {
 function _renderPlaybookGrid() {
   const grid = document.getElementById('playbook-grid');
   if (!grid) return;
-  const { playbook } = AppState;
+  const playbook = AppState.playbook.filter(_belongsToActiveAccount);
   const trades   = getActiveTrades();
   const currency = getCurrency();
 
@@ -94,6 +109,7 @@ function _renderPlaybookGrid() {
 // ─────────────────────────────────────────────
 export function renderAddSetupModal(setupId = null) {
   const s = setupId ? AppState.playbook.find(x=>x.id===setupId) : null;
+  const selectedAccountId = s?.accountId || _getActiveAccountId();
   const rules = s?.rules || [];
   return `
 <div class="modal-header">
@@ -101,6 +117,12 @@ export function renderAddSetupModal(setupId = null) {
   <button class="modal-close" id="m-close"><svg viewBox="0 0 14 14" fill="none"><line x1="1" y1="1" x2="13" y2="13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="13" y1="1" x2="1" y2="13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
 </div>
 <div class="modal-body">
+  <div class="form-group mb-16">
+    <label class="form-label">Account</label>
+    <select class="form-input form-select" id="setup-account">
+      ${_accountOptions(selectedAccountId)}
+    </select>
+  </div>
   <div class="form-group mb-16">
     <label class="form-label">Setup Name</label>
     <input class="form-input" id="setup-name" placeholder="e.g. London Breakout" value="${s?.name||''}">
@@ -160,6 +182,7 @@ export function initAddSetupModal(setupId = null) {
     const btn = document.getElementById('setup-save-btn');
     btn.disabled = true; btn.textContent = 'Saving...';
     const data = {
+      accountId:   document.getElementById('setup-account')?.value || null,
       name,
       description: document.getElementById('setup-desc')?.value.trim() || '',
       timeframe:   document.getElementById('setup-tf')?.value.trim() || '',
@@ -201,7 +224,7 @@ export function initReview() {
 function _renderReviews() {
   const body = document.getElementById('reviews-body');
   if (!body) return;
-  const { reviews } = AppState;
+  const reviews = AppState.reviews.filter(_belongsToActiveAccount);
   const currency    = getCurrency();
   const trades      = getActiveTrades();
 
@@ -270,6 +293,7 @@ function _renderReviews() {
 export function renderAddReviewModal() {
   const today   = new Date().toISOString().split('T')[0];
   const weekAgo = new Date(Date.now()-7*86400000).toISOString().split('T')[0];
+  const selectedAccountId = _getActiveAccountId();
   return `
 <div class="modal-header">
   <span class="modal-title">New Review</span>
@@ -277,6 +301,12 @@ export function renderAddReviewModal() {
 </div>
 <div class="modal-body">
   <div class="form-grid-2">
+    <div class="form-group">
+      <label class="form-label">Account</label>
+      <select class="form-input form-select" id="rv-account">
+        ${_accountOptions(selectedAccountId)}
+      </select>
+    </div>
     <div class="form-group">
       <label class="form-label">Review Type</label>
       <select class="form-input form-select" id="rv-type">
@@ -339,6 +369,7 @@ export function initAddReviewModal() {
       const score    = scoreRaw ? parseInt(scoreRaw) : null;
 
       await DB.addReview(AppState.user.uid, {
+        accountId:    document.getElementById('rv-account')?.value || null,
         type:         document.getElementById('rv-type')?.value || 'weekly',
         score:        (score && score >= 1 && score <= 10) ? score : null,
         startDate:    DB.toTimestamp(startVal + 'T00:00:00'),
@@ -405,7 +436,7 @@ function _getMilestoneProgress(ms) {
 function _renderMilestoneGrid() {
   const content = document.getElementById('ms-content');
   if (!content) return;
-  const { milestones } = AppState;
+  const milestones = AppState.milestones.filter(_belongsToActiveAccount);
   const currency = getCurrency();
 
   if (!milestones.length) {
@@ -468,12 +499,19 @@ function _renderMilestoneGrid() {
 export function renderAddMilestoneModal(msId = null) {
   const ms    = msId ? AppState.milestones.find(x=>x.id===msId) : null;
   const today = new Date().toISOString().split('T')[0];
+  const selectedAccountId = ms?.accountId || _getActiveAccountId();
   return `
 <div class="modal-header">
   <span class="modal-title">${ms ? 'Edit Milestone' : 'New Milestone'}</span>
   <button class="modal-close" id="m-close"><svg viewBox="0 0 14 14" fill="none"><line x1="1" y1="1" x2="13" y2="13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="13" y1="1" x2="1" y2="13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
 </div>
 <div class="modal-body">
+  <div class="form-group mb-16">
+    <label class="form-label">Account</label>
+    <select class="form-input form-select" id="ms-account">
+      ${_accountOptions(selectedAccountId)}
+    </select>
+  </div>
   <div class="form-group mb-16">
     <label class="form-label">Title</label>
     <input class="form-input" id="ms-title" placeholder="e.g. Reach $25,000 balance" value="${ms?.title||''}">
@@ -530,6 +568,7 @@ export function initAddMilestoneModal(msId = null) {
 
     const dateVal = document.getElementById('ms-date')?.value;
     const data = {
+      accountId:   document.getElementById('ms-account')?.value || null,
       title,
       description: document.getElementById('ms-desc')?.value.trim() || '',
       type:        document.getElementById('ms-type')?.value || 'custom',

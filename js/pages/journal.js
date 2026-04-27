@@ -208,7 +208,9 @@ function _tradeCard(t, currency) {
 // ── ADD/EDIT TRADE MODAL ─────────────────────────────────────────
 export function renderAddTradeModal(tradeId = null) {
   const t = tradeId ? AppState.trades.find(x=>x.id===tradeId) : {};
-  const pb = AppState.playbook;
+  const defaultAccountId = t.accountId || getActiveAccount()?.id || AppState.accounts[0]?.id || '';
+  const pb = AppState.playbook.filter(s => !s.accountId || s.accountId === defaultAccountId);
+  const accountOptions = AppState.accounts.map(a => `<option value="${a.id}" ${a.id===defaultAccountId?'selected':''}>${a.name} · ${a.currency}</option>`).join('');
   const dateVal = t.date ? (() => { const d=t.date.toDate?.()??new Date(t.date); return d.toISOString().split('T')[0]; })() : new Date().toISOString().split('T')[0];
   const timeVal = t.time || new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false});
   const existing = !!tradeId;
@@ -224,6 +226,12 @@ export function renderAddTradeModal(tradeId = null) {
     <div class="form-section">
       <div class="form-section-title">Trade Details</div>
       <div class="form-grid-2">
+        <div class="form-group">
+          <label class="form-label">Account</label>
+          <select class="form-input form-select" id="tf-account">
+            ${accountOptions || '<option value="">No account found</option>'}
+          </select>
+        </div>
         <div class="form-group">
           <label class="form-label">Symbol</label>
           ${buildSymbolDropdown(t.symbol||'')}
@@ -394,7 +402,8 @@ export function initAddTradeModal(tradeId = null) {
     const setupId   = setupSel?.value || null;
     const setupName = setupId ? AppState.playbook.find(s=>s.id===setupId)?.name||'' : '';
     const rVal      = parseFloat(document.getElementById('tf-r')?.value);
-    const acct      = getActiveAccount();
+    const selectedAccountId = document.getElementById('tf-account')?.value || '';
+    const acct      = AppState.accounts.find(a => a.id === selectedAccountId) || getActiveAccount();
 
     const trade = {
       accountId:       acct?.id || null,
@@ -431,10 +440,22 @@ export function initAddTradeModal(tradeId = null) {
         toast('Trade updated.','success');
         close();
         if (acct) {
-          const diff = pnl - (existing.pnl||0);
-          DB.updateAccount(AppState.user.uid, acct.id, { balance: (acct.balance||0) + diff }).catch(err => {
-            toast(`Trade saved, but balance sync failed: ${err.message}`, 'error');
-          });
+          const oldAcct = AppState.accounts.find(a => a.id === existing.accountId);
+          const movedAccount = oldAcct && oldAcct.id !== acct.id;
+
+          if (movedAccount) {
+            DB.updateAccount(AppState.user.uid, oldAcct.id, { balance: (oldAcct.balance||0) - (existing.pnl||0) }).catch(err => {
+              toast(`Trade saved, but old account sync failed: ${err.message}`, 'error');
+            });
+            DB.updateAccount(AppState.user.uid, acct.id, { balance: (acct.balance||0) + pnl }).catch(err => {
+              toast(`Trade saved, but new account sync failed: ${err.message}`, 'error');
+            });
+          } else {
+            const diff = pnl - (existing.pnl||0);
+            DB.updateAccount(AppState.user.uid, acct.id, { balance: (acct.balance||0) + diff }).catch(err => {
+              toast(`Trade saved, but balance sync failed: ${err.message}`, 'error');
+            });
+          }
         }
       } else {
         await DB.addTrade(AppState.user.uid, trade);
