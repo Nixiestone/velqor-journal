@@ -3,13 +3,20 @@ import { getApp, initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.
 import {
   getAuth, onAuthStateChanged, signInWithEmailAndPassword,
   createUserWithEmailAndPassword, signOut, updateProfile,
-  GoogleAuthProvider, signInWithPopup, sendPasswordResetEmail
+  GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, sendPasswordResetEmail
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import { firebaseConfig } from '../firebase-config.js';
 import { DB } from './db.js';
 
 let _app, _auth;
 export let currentUser = null;
+const DEFAULT_DISCIPLINE_RULES = [
+  'No trading during high-impact news without a plan',
+  'Maximum 3 trades per session',
+  'Never move stop loss against the position',
+  'Only trade A+ setups from your playbook',
+  'No revenge trading after 2 consecutive losses'
+];
 
 export function initFirebase() {
   try { _app = initializeApp(firebaseConfig); } catch(e) { _app = getApp(); }
@@ -22,6 +29,48 @@ export function getFirebaseAuth() { return _auth; }
 
 export function watchAuthState(onLogin, onLogout) {
   return onAuthStateChanged(_auth, user => { currentUser = user; user ? onLogin(user) : onLogout(); });
+}
+
+export function getAuthErrorMessage(err) {
+  const msgs = {
+    'auth/user-not-found': 'No account found with this email.',
+    'auth/wrong-password': 'Incorrect password.',
+    'auth/email-already-in-use': 'An account with this email already exists.',
+    'auth/weak-password': 'Password must be at least 6 characters.',
+    'auth/invalid-email': 'Invalid email address.',
+    'auth/invalid-credential': 'Invalid email or password.',
+    'auth/too-many-requests': 'Too many attempts. Try again later.',
+    'auth/popup-blocked': 'Popup was blocked by your browser. Allow popups, then try Google sign-in again.',
+    'auth/operation-not-supported-in-this-environment': 'This browser does not allow popup sign-in. Redirecting to Google instead.',
+    'auth/operation-not-allowed': 'Google sign-in is disabled in Firebase Authentication. Enable Google provider and try again.',
+    'auth/unauthorized-domain': 'This domain is not authorized in Firebase Auth settings. Add it under Authentication > Settings > Authorized domains.',
+    'auth/network-request-failed': 'Network error while contacting Google. Check your connection and retry.',
+    'auth/account-exists-with-different-credential': 'An account already exists with this email using a different sign-in method.'
+  };
+  return msgs[err?.code] || err?.message || 'Authentication failed. Please try again.';
+}
+
+async function _ensureProfileForGoogleUser(user) {
+  const profile = await DB.getProfile(user.uid);
+  if (profile) return;
+
+  const acctRef = await DB.addAccount(user.uid, {
+    name: 'Main Account',
+    currency: 'USD',
+    balance: 10000,
+    startingBalance: 10000,
+    broker: '',
+    colorIndex: 0
+  });
+
+  await DB.createProfile(user.uid, {
+    displayName:     user.displayName || 'Trader',
+    email:           user.email || '',
+    activeAccountId: acctRef.id,
+    riskPerTrade: 1,
+    disciplineRules: DEFAULT_DISCIPLINE_RULES,
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+  });
 }
 
 export async function loginEmail(email, password) {
@@ -47,13 +96,7 @@ export async function registerEmail(email, password, displayName, accountData) {
     email,
     activeAccountId: acctRef.id,
     riskPerTrade: 1,
-    disciplineRules: [
-      'No trading during high-impact news without a plan',
-      'Maximum 3 trades per session',
-      'Never move stop loss against the position',
-      'Only trade A+ setups from your playbook',
-      'No revenge trading after 2 consecutive losses'
-    ],
+    disciplineRules: DEFAULT_DISCIPLINE_RULES,
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
   });
   return cred.user;
@@ -61,28 +104,29 @@ export async function registerEmail(email, password, displayName, accountData) {
 
 export async function loginGoogle() {
   const provider = new GoogleAuthProvider();
-  const cred = await signInWithPopup(_auth, provider);
-  const profile = await DB.getProfile(cred.user.uid);
-  if (!profile) {
-    const acctRef = await DB.addAccount(cred.user.uid, {
-      name: 'Main Account', currency: 'USD',
-      balance: 10000, startingBalance: 10000, broker: '', colorIndex: 0
-    });
-    await DB.createProfile(cred.user.uid, {
-      displayName:     cred.user.displayName || 'Trader',
-      email:           cred.user.email,
-      activeAccountId: acctRef.id,
-      riskPerTrade: 1,
-      disciplineRules: [
-        'No trading during high-impact news without a plan',
-        'Maximum 3 trades per session',
-        'Never move stop loss against the position',
-        'Only trade A+ setups from your playbook',
-        'No revenge trading after 2 consecutive losses'
-      ],
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
-    });
+  provider.setCustomParameters({ prompt: 'select_account' });
+
+  try {
+    const cred = await signInWithPopup(_auth, provider);
+    await _ensureProfileForGoogleUser(cred.user);
+    return cred.user;
+  } catch (err) {
+    const fallbackCodes = new Set([
+      'auth/popup-blocked',
+      'auth/operation-not-supported-in-this-environment'
+    ]);
+    if (fallbackCodes.has(err?.code)) {
+      await signInWithRedirect(_auth, provider);
+      return null;
+    }
+    throw err;
   }
+}
+
+export async function finalizeRedirectLogin() {
+  const cred = await getRedirectResult(_auth);
+  if (!cred?.user) return null;
+  await _ensureProfileForGoogleUser(cred.user);
   return cred.user;
 }
 
@@ -145,8 +189,15 @@ export function initAuthUI(onAuthSuccess) {
 
   googleBtn?.addEventListener('click', async () => {
     clearError();
-    try { onAuthSuccess(await loginGoogle()); }
-    catch(err) { if (err.code !== 'auth/popup-closed-by-user') showError(err.message); }
+    googleBtn.disabled = true;
+    try {
+      const user = await loginGoogle();
+      if (user) onAuthSuccess(user);
+    } catch(err) {
+      if (err.code !== 'auth/popup-closed-by-user') showError(getAuthErrorMessage(err));
+    } finally {
+      googleBtn.disabled = false;
+    }
   });
 
   form?.addEventListener('submit', async e => {
@@ -171,16 +222,7 @@ export function initAuthUI(onAuthSuccess) {
       onAuthSuccess(user);
     } catch(err) {
       setLoading(false);
-      const msgs = {
-        'auth/user-not-found': 'No account found with this email.',
-        'auth/wrong-password': 'Incorrect password.',
-        'auth/email-already-in-use': 'An account with this email already exists.',
-        'auth/weak-password': 'Password must be at least 6 characters.',
-        'auth/invalid-email': 'Invalid email address.',
-        'auth/invalid-credential': 'Invalid email or password.',
-        'auth/too-many-requests': 'Too many attempts. Try again later.',
-      };
-      showError(msgs[err.code] || err.message);
+      showError(getAuthErrorMessage(err));
     }
   });
 }

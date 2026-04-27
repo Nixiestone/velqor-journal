@@ -4,10 +4,10 @@
 // Project Settings > General > Your apps > Web app > Config
 
 export const firebaseConfig = {
-  apiKey:            "AIzaSyCbezXwgzcA7Vt5AB0BD41_DtBnrggqeAA",
-  authDomain:        "velqor-journal.firebaseapp.com",
-  projectId:         "velqor-journal",
-  storageBucket:     "velqor-journal.appspot.com",
-  messagingSenderId: "963811590851",
-  appId:             "1:963811590851:web:4b93dacd61e97702c01876"
+  apiKey:            "AIzaSyB18NcZv0PqBYRbj1bkBzwo7IV34WFENNE",
+  authDomain:        "nixie-journal.firebaseapp.com",
+  projectId:         "nixie-journal",
+  storageBucket:     "nixie-journal.firebasestorage.app",
+  messagingSenderId: "1071210959436",
+  appId:             "1:1071210959436:web:3092fa169be67f88e6dae9"
 };

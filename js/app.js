@@ -1,5 +1,5 @@
 // VELQOR JOURNAL — Main Application
-import { initFirebase, watchAuthState, initAuthUI, logout } from './auth.js';
+import { initFirebase, watchAuthState, initAuthUI, logout, finalizeRedirectLogin, getAuthErrorMessage } from './auth.js';
 import { DB } from './db.js';
 
 // === SHARED STATE ===
@@ -188,10 +188,28 @@ function _initAccountModal(accountId) {
     const btn = document.getElementById('m-save');
     btn.disabled = true; btn.textContent = 'Saving...';
     try {
-      if (acct) { await DB.updateAccount(AppState.user.uid, acct.id, data); toast('Account updated.', 'success'); }
-      else       { const ref = await DB.addAccount(AppState.user.uid, data); if (!AppState.profile?.activeAccountId) await DB.updateProfile(AppState.user.uid, { activeAccountId: ref.id }); toast('Account added.', 'success'); }
+      if (acct) {
+        await DB.updateAccount(AppState.user.uid, acct.id, data);
+        toast('Account updated.', 'success');
+        closeModal();
+        return;
+      }
+
+      const ref = await DB.addAccount(AppState.user.uid, data);
+      toast('Account added.', 'success');
       closeModal();
-    } catch(e) { toast(e.message, 'error'); btn.disabled=false; btn.textContent = acct?'Save Changes':'Add Account'; }
+
+      // Do not block modal close on this secondary sync write.
+      if (!AppState.profile?.activeAccountId && AppState.accounts.length === 0) {
+        DB.updateProfile(AppState.user.uid, { activeAccountId: ref.id }).catch(e => {
+          toast(`Account added, but active account sync failed: ${e.message}`, 'error');
+        });
+      }
+    } catch(e) {
+      toast(e.message, 'error');
+      btn.disabled=false;
+      btn.textContent = acct?'Save Changes':'Add Account';
+    }
   });
 }
 
@@ -405,6 +423,13 @@ function _showAuth() {
   _currentPage=null; _didInitNav=false; _sidebarInited=false; _switcherInited=false;
 }
 
+function _showAuthError(msg) {
+  const errorDiv = document.getElementById('auth-error');
+  if (!errorDiv) return;
+  errorDiv.textContent = msg;
+  errorDiv.style.display = '';
+}
+
 // === BOOT ===
 async function boot() {
   // One-time backdrop click handler
@@ -413,6 +438,12 @@ async function boot() {
   });
 
   initFirebase();
+  try {
+    await finalizeRedirectLogin();
+  } catch (err) {
+    console.warn('[VELQOR] Redirect sign-in failed:', err);
+    _showAuthError(getAuthErrorMessage(err));
+  }
 
   function onLogin(user) {
     if (AppState.user?.uid === user.uid) return;

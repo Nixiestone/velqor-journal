@@ -428,17 +428,24 @@ export function initAddTradeModal(tradeId = null) {
     try {
       if (existing) {
         await DB.updateTrade(AppState.user.uid, existing.id, trade);
+        toast('Trade updated.','success');
+        close();
         if (acct) {
           const diff = pnl - (existing.pnl||0);
-          await DB.updateAccount(AppState.user.uid, acct.id, { balance: (acct.balance||0) + diff });
+          DB.updateAccount(AppState.user.uid, acct.id, { balance: (acct.balance||0) + diff }).catch(err => {
+            toast(`Trade saved, but balance sync failed: ${err.message}`, 'error');
+          });
         }
-        toast('Trade updated.','success');
       } else {
         await DB.addTrade(AppState.user.uid, trade);
-        if (acct) await DB.updateAccount(AppState.user.uid, acct.id, { balance: (acct.balance||0) + pnl });
         toast('Trade logged.','success');
+        close();
+        if (acct) {
+          DB.updateAccount(AppState.user.uid, acct.id, { balance: (acct.balance||0) + pnl }).catch(err => {
+            toast(`Trade saved, but balance sync failed: ${err.message}`, 'error');
+          });
+        }
       }
-      close();
     } catch(err) {
       toast(err.message,'error');
       if(lbl) lbl.style.display=''; if(spn) spn.style.display='none'; btn.disabled=false;
