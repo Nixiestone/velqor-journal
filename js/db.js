@@ -3,7 +3,7 @@ import {
   getFirestore, collection, doc, getDoc, setDoc, addDoc,
   updateDoc, deleteDoc, onSnapshot, query, orderBy,
   serverTimestamp, Timestamp
-} from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 let _db;
 

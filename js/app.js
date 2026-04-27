@@ -1,6 +1,6 @@
 // VELQOR JOURNAL — Main Application
-import { initFirebase, watchAuthState, initAuthUI, logout } from '../auth.js';
-import { DB } from '../db.js';
+import { initFirebase, watchAuthState, initAuthUI, logout } from './auth.js';
+import { DB } from './db.js';
 
 // === SHARED STATE ===
 export const AppState = {
@@ -28,7 +28,7 @@ async function _preload() {
     _mods.risk       = await import('./pages/risk-analysis.js');
     _mods.discipline = await import('./pages/discipline.js');
     _mods.help       = await import('./pages/help.js');
-    _mods.pdf        = await import('../velqor-journal/js/pdf-export.js');
+    _mods.pdf        = await import('./pdf-export.js');
   } catch(e) { console.warn('Preload partial:', e.message); }
 }
 
@@ -331,7 +331,7 @@ function _initSidebar() {
     el.addEventListener('click', e => { e.preventDefault(); const p=el.dataset.page; if(p) window.location.hash='#/'+p; });
   });
   document.getElementById('logout-btn')?.addEventListener('click', async () => { if(confirm('Sign out of VELQOR JOURNAL?')) await logout(); });
-  document.getElementById('export-pdf-btn')?.addEventListener('click', async () => { const m=_mods.pdf||await import('../velqor-journal/js/pdf-export.js'); m.generatePDF(); });
+  document.getElementById('export-pdf-btn')?.addEventListener('click', async () => { const m=_mods.pdf||await import('./pdf-export.js'); m.generatePDF(); });
   _initAccountSwitcher();
 }
 
@@ -394,12 +394,12 @@ function _showApp() {
 }
 
 function _showAuth() {
-  const auth = document.getElementById('auth-screen');
-  const app  = document.getElementById('app');
-  const load = document.getElementById('app-loading');
-  if (app)  { app.style.display  = 'none'; }
-  if (auth) { auth.style.display = 'flex'; auth.classList.remove('hidden'); }
-  if (load) { load.style.display = 'none'; }
+  const auth=document.getElementById('auth-screen');
+  const app =document.getElementById('app');
+  const load=document.getElementById('app-loading');
+  if(app)  app.style.display  = 'none';
+  if(auth) { auth.style.display = 'flex'; auth.classList.remove('hidden'); }
+  if(load) { load.style.display = 'none'; load.classList.add('hidden'); }
   AppState._unsubs.forEach(fn=>fn()); AppState._unsubs=[];
   Object.assign(AppState,{user:null,profile:null,accounts:[],activeAccount:null,trades:[],playbook:[],reviews:[],milestones:[]});
   _currentPage=null; _didInitNav=false; _sidebarInited=false; _switcherInited=false;
@@ -428,13 +428,13 @@ async function boot() {
   watchAuthState(user => onLogin(user), () => _showAuth());
   window.addEventListener('hashchange', () => { if(AppState.user) navigate(_getPage()); });
 
-  // Safety net: if Firebase hasn't responded in 6s, show auth screen
+  // Hard fallback: if Firebase hasn't responded in 5 seconds, show auth screen
   setTimeout(() => {
     const load = document.getElementById('app-loading');
     if (load && load.style.display !== 'none') {
-      console.warn('Firebase timeout — showing auth screen');
+      console.warn('[VELQOR] Firebase timeout — forcing auth screen');
       _showAuth();
     }
-  }, 6000);
+  }, 5000);
 }
 boot();

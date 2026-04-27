@@ -1,5 +1,5 @@
 // VELQOR JOURNAL — Time Analysis Page
-import { AppState, openModal, getActiveTrades, getCurrency, closeModal } from './app.js';
+import { AppState, openModal, getActiveTrades, getCurrency, closeModal } from '../app.js';
 import { fmt, fmtR, computeMetrics, getBySession, getByDayOfWeek, getByHour, groupByPeriod, colorForValue } from '../utils.js';
 import { Charts } from '../charts.js';
 
